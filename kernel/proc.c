@@ -681,3 +681,97 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+//------------------------------------ Task3 --------------------------------------
+// Cooperative yield directly to another process.
+// Uses existing proc fields only:
+//   chan   = pid this process is waiting for
+//   xstate = value this process wants to pass
+int
+co_yield(int pid, int value)
+{
+  struct proc *p = myproc();
+  struct proc *target = 0;
+  struct proc *pp;
+
+  if(pid <= 0 || pid == p->pid || value < 0)
+    return -1;
+
+  // Find target process.
+  for(pp = proc; pp < &proc[NPROC]; pp++){
+    acquire(&pp->lock);
+    if(pp->pid == pid && pp->state != UNUSED && pp->state != ZOMBIE){
+      if(pp->killed){
+        release(&pp->lock);
+        return -1;
+      }
+      target = pp;
+      break; // keep target->lock held
+    }
+    release(&pp->lock);
+  }
+
+  if(target == 0)
+    return -1;
+
+  void *my_chan = (void *)(uint64)p->pid;
+  void *target_chan = (void *)(uint64)pid;
+
+  // Main case: target is already waiting for this process.
+  if(target->state == SLEEPING && target->chan == my_chan){
+    struct cpu *c = mycpu();
+
+    acquire(&p->lock);
+    p->xstate = value;
+    p->chan = target_chan;
+    p->state = SLEEPING;
+    release(&p->lock);
+
+    target->trapframe->a0 = value;
+    target->state = RUNNING;
+    c->proc = target;
+
+    // Switch directly to target.
+    // target->lock is held here, so target will resume and release it.
+    swtch(&p->context, &target->context);
+
+    // We resume here after the other process directly switched back to us.
+    // At this point our p->lock is held by the switcher.
+    mycpu()->proc = p;
+    p->chan = 0;
+    int ret = p->killed ? -1 : (int)p->trapframe->a0;
+
+    if(holding(&p->lock))
+      release(&p->lock);
+
+    return ret;
+  }
+
+  // Edge / first call case: target is not ready yet.
+  if(target->state == SLEEPING){
+    release(&target->lock);
+    return -1;
+  }
+
+  release(&target->lock);
+
+  acquire(&p->lock);
+  p->xstate = value;
+  p->chan = target_chan;
+  p->state = SLEEPING;
+
+  // First call may go through scheduler so the other process can run.
+  sched();
+
+  // We resume here after a direct switch back to us.
+  mycpu()->proc = p;
+  p->chan = 0;
+  int ret = p->killed ? -1 : (int)p->trapframe->a0;
+
+  if(holding(&p->lock))
+    release(&p->lock);
+
+  return ret;
+}
+//------------------------------------ Task3 --------------------------------------

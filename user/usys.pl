@@ -36,3 +36,5 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+entry("memsize");                  #      <-- Task2 
+entry("co_yield");                 #      <-- Task3

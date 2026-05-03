@@ -6,6 +6,14 @@
 #include "spinlock.h"
 #include "proc.h"
 
+//------------------------ Task2 ----------------------------------------
+uint64
+sys_memsize(void)
+{
+  return myproc()->sz;
+}
+//------------------------ Task2 ----------------------------------------
+
 uint64
 sys_exit(void)
 {
@@ -89,3 +97,17 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+//------------------------ Task3 ----------------------------------------
+uint64
+sys_co_yield(void)
+{
+  int pid;
+  int value;
+
+  argint(0, &pid);
+  argint(1, &value);
+
+  return co_yield(pid, value);
+}
+//------------------------ Task3 ----------------------------------------
